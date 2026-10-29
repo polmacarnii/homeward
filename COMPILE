@@ -1,0 +1,2 @@
+#!/bin/sh
+c3c compile src/main.c3 src/rs.c3 src/gf256.c3 -o homeword

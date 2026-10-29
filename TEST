@@ -1,0 +1,81 @@
+#!/bin/sh
+cd "$(dirname "$0")" || exit 1
+
+BIN=./homeword
+T=test
+
+# esto son los numeros de bloques a dañar
+case "$1" in
+    "")  n=8 ;;
+    -n)  n="$2" ;;
+    -n*) n="${1#-n}" ;;
+    *)   n="$1" ;;
+esac
+case "$n" in
+    ""|*[!0-9]*)
+        echo "TEST: uso: ./TEST [-n <chracaters>], int major than 1" >&2
+        echo "no"
+        exit 1 ;;
+esac
+[ "$n" -gt 1 ] || {
+    echo "TEST: The number of damaged characters must be greater than 1" >&2
+    echo "no"
+    exit 1
+}
+
+command -v fortune >/dev/null 2>&1 || {
+    echo "TEST: Fortune is not installed" >&2
+    echo "no"
+    exit 1
+}
+
+./COMPILE >/dev/null || {
+    echo "TEST: ./homeword does not exist" >&2
+    echo "no"
+    exit 1
+}
+mkdir -p "$T"
+
+fortune > "$T/01-text.txt" 2>/dev/null || {
+    echo "TEST: Fortune did not generated text" >&2
+    echo "no"
+    exit 1
+}
+
+"$BIN" encode "$T/01-text.txt" "$T/01-text.rd" >/dev/null || {
+    echo "no"
+    exit 1
+}
+
+cp "$T/01-text.txt" "$T/02-bad.txt"
+blocks=$(( ($(wc -c < "$T/01-text.txt") + 1) / 2 ))
+[ "$n" -gt "$blocks" ] && n=$blocks
+
+used=" "
+i=0
+while [ "$i" -lt "$n" ]; do
+    rnd=$(od -An -tu4 -N4 /dev/urandom | tr -d ' ')
+    blk=$(( rnd % blocks ))
+
+    case "$used" in *" $blk "*) continue ;; esac
+    off=$(( blk * 2 + $(od -An -tu1 -N1 /dev/urandom | tr -d ' ') % 2 ))
+
+    dd if=/dev/urandom of="$T/02-bad.txt" bs=1 count=1 seek="$off" conv=notrunc 2>/dev/null
+    used="$used$blk "
+
+    i=$(( i + 1 ))
+done
+
+"$BIN" fix "$T/02-bad.txt" "$T/01-text.rd" "$T/03-fixed.txt" >/dev/null || {
+    echo "no"
+    exit 1
+}
+
+if cmp -s "$T/01-text.txt" "$T/03-fixed.txt"; then
+    echo "yes"
+    exit 0
+else
+    echo "no"
+    diff "$T/01-text.txt" "$T/03-fixed.txt" >&2
+    exit 1
+fi
